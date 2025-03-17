@@ -4,11 +4,16 @@ import (
 	"log"
 	"net/http"
 
+	facades "socket_project/cluster_module/Facades"
 	r "socket_project/router"
 	"socket_project/socket"
 )
 
 func main() {
+
+	clusters := facades.GetAllClusters()
+
+	socket.InitClusters(clusters)
 
 	router := r.InitRouter()
 

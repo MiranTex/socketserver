@@ -3,11 +3,14 @@ package socket
 import (
 	"context"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net/http"
 	Classes "socket_project/classes"
+	entity "socket_project/cluster_module/Entity"
 	"socket_project/factory"
 	"socket_project/interfaces"
+	"socket_project/utils"
 	"sync"
 
 	"github.com/gorilla/websocket"
@@ -22,6 +25,8 @@ var (
 		},
 	}
 
+	Clusters []entity.Cluster
+
 	connections sync.Map
 	eventChan   = make(chan Classes.Event, 100)
 	ctx, cancel = context.WithCancel(context.Background())
@@ -32,7 +37,13 @@ func init() {
 	go eventDispatcher()
 }
 
+func InitClusters(clusters []entity.Cluster) {
+	Clusters = clusters
+}
+
 func Handler(w http.ResponseWriter, r *http.Request) {
+
+	fmt.Println("New connection")
 	conn, err := upgrader.Upgrade(w, r, nil)
 	if err != nil {
 		log.Println(err)
@@ -52,20 +63,53 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
+		cluster, err := getClusterByPublickKey(request.ClusterPublicId)
+		fmt.Println(cluster)
+
+		if err != nil {
+			conn.WriteMessage(websocket.TextMessage, []byte("Cluster not found"))
+			break
+		}
+
+		if !cluster.AuthenticateonCluster(request.AccessToken) {
+			conn.WriteMessage(websocket.TextMessage, []byte("Unauthorized"))
+
+			break
+		}
+
 		switch request.RequestType {
 		case "connection":
-			client := factory.CreateClient(request.Id, conn, request.Subscriptions)
+
+			fmt.Println("Connection request")
+
+			client := factory.CreateClient(utils.GenerateUUID(), conn, request.Subscriptions)
 			connections.Store(request.Id, client)
+
+			client.SendEvent(Classes.CreateEvent(utils.GenerateUUID(), "connection", map[string]interface{}{"id": client.Id()}))
+
 			wg.Add(1)
 			go handleClientEvents(ctx, client)
 		case "event":
+			fmt.Println("Event request")
 			event := Classes.CreateEvent(request.Id, request.EventType, request.EventMessage)
 			eventChan <- event
 		}
 	}
 }
 
+func getClusterByPublickKey(publicKey string) (entity.Cluster, error) {
+	for _, cluster := range Clusters {
+		if cluster.PublicId() == publicKey {
+			return cluster, nil
+		}
+	}
+	return entity.Cluster{}, fmt.Errorf("cluster not found")
+}
+
 func handleClientEvents(ctx context.Context, client interfaces.ClientInterface) {
+
+	fmt.Println("Handling client events")
+
 	defer wg.Done()
 	for {
 		select {

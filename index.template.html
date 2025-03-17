@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Document</title>
+
+    <style>
+        table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+    </style>
+    <script>
+        document.addEventListener("DOMContentLoaded", function() {
+            fetchClusters();
+
+            document.getElementById("createClusterForm").addEventListener("submit", function(event) {
+                event.preventDefault();
+                createCluster();
+            });
+        });
+        
+        function fetchClusters() {
+            fetch('/clusters')
+                .then(response => response.json())
+                .then(data => {
+                    const tbody = document.querySelector("table tbody");
+                    tbody.innerHTML = "";
+                    data.clusters.forEach(cluster => {
+                        const row = document.createElement("tr");
+                        row.innerHTML = `
+                            <td>${cluster.id}</td>
+                            <td>${cluster.publicId}</td>
+                            <td>${cluster.name}</td>
+                            <td>${cluster.status ? 'Active' : 'Inactive'}</td>
+                            <td>${cluster.owner}</td>
+                        `;
+                        tbody.appendChild(row);
+                    });
+                });
+        }
+
+        function createCluster() {
+            const formData = new FormData(document.getElementById("createClusterForm"));
+            const data = {};
+            formData.forEach((value, key) => data[key] = value);
+
+            fetch('/cluster', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json'
+                },
+                body: JSON.stringify(data)
+            })
+            .then(response => response.json())
+            .then(() => {
+                fetchClusters();
+                document.getElementById("createClusterForm").reset();
+            });
+        }
+    </script>
+</head>
+<body>
+
+    <h2>Clusters</h2>
+    <table>
+        <thead>
+            <tr>
+                <th>ID</th>
+                <th>Public ID</th>
+                <th>Name</th>
+                <th>Status</th>
+                <th>Owner</th>
+            </tr>
+        </thead>
+        <tbody>
+            <!-- Dados dos clusters serão preenchidos aqui via AJAX -->
+        </tbody>
+    </table>
+
+    <h2>Create New Cluster</h2>
+    <form id="createClusterForm">
+        <!-- Campo ID removido -->
+        <label for="name">Name:</label><br>
+        <input type="text" id="name" name="name"><br>
+        <label for="access_token">Access Token:</label><br>
+        <input type="text" id="access_token" name="access_token"><br>
+        <label for="owner">Owner:</label><br>
+        <input type="text" id="owner" name="owner"><br>
+        <input type="submit" value="Create Cluster">
+    </form>
+
+</body>
+</html>

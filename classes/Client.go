@@ -30,7 +30,7 @@ func NewClient(id string, conn *websocket.Conn, subscriptions []string) Client {
 
 func (c Client) SendEvent(event Event) (bool, error) {
 
-	if !c.isSubscribedTo(event.GetEventType()) {
+	if !c.isSubscribedTo(event.GetEventType()) && event.GetEventType() != "connection" {
 		return false, nil
 	}
 

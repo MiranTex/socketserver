@@ -1,6 +1,7 @@
 package repository
 
 import (
+	entity "socket_project/cluster_module/Entity"
 	models "socket_project/cluster_module/Models"
 
 	"gorm.io/gorm"
@@ -21,5 +22,22 @@ func SaveCluster(dbConnection *gorm.DB, cluster ToModelCovertable[models.Cluster
 	}
 
 	return clusterModel.ID
+
+}
+
+func GetAllClusters(dbConnection *gorm.DB) []entity.Cluster {
+
+	var clustersModels []models.Cluster
+
+	dbConnection.Find(&clustersModels)
+
+	var clusters []entity.Cluster
+
+	for _, clusterModel := range clustersModels {
+		cluster := entity.CreateFromModel(clusterModel)
+		clusters = append(clusters, *cluster)
+	}
+
+	return clusters
 
 }
