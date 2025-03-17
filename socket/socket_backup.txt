@@ -1,0 +1,117 @@
+package socket
+
+import (
+	"encoding/json"
+	"fmt"
+	"log"
+	"net/http"
+	classes "socket_project/classes"
+	"socket_project/factory"
+	"socket_project/interfaces"
+	"sync"
+
+	"github.com/gorilla/websocket"
+)
+
+var (
+	upgrader = websocket.Upgrader{
+		ReadBufferSize:  1024,
+		WriteBufferSize: 1024,
+		CheckOrigin: func(r *http.Request) bool {
+			return true
+		},
+	}
+
+	Connections []interfaces.ClientInterface
+
+	mux sync.Mutex
+)
+
+func Handler(w http.ResponseWriter, r *http.Request) {
+	print("Socket connection\n")
+
+	conn, err := upgrader.Upgrade(w, r, nil)
+	if err != nil {
+		log.Println(err)
+		return
+	}
+
+	for {
+		_, p, err := conn.ReadMessage()
+		if err != nil {
+			log.Println(err)
+			return
+		}
+
+		var request classes.SocketRequest
+		err = json.Unmarshal([]byte(p), &request)
+
+		if err != nil {
+			log.Println(err)
+			continue
+		}
+
+		if request.RequestType == "connection" {
+
+			client := factory.CreateClient(request.Id, conn, request.Subscriptions)
+
+			Connections = append(Connections, client)
+
+			go handleClientEvents(client)
+
+			continue
+		}
+
+		if request.RequestType == "event" {
+
+			fmt.Println("Event received")
+
+			event := classes.CreateEvent(request.Id, request.EventType, request.EventMessage)
+
+			go SendUpdateSign(event)
+		}
+
+	}
+}
+
+func handleClientEvents(client interfaces.ClientInterface) {
+	for {
+		status := client.GetConnectionSatus()
+
+		if !status {
+
+			removeClient(client)
+			return
+		}
+
+	}
+}
+
+func removeClient(client interfaces.ClientInterface) {
+	for i, client_ := range Connections {
+
+		if client_.Id() == client.Id() {
+			Connections = append((Connections)[:i], (Connections)[i+1:]...)
+			break
+		}
+	}
+}
+
+func SendUpdateSign(event classes.Event) {
+	for _, client := range Connections {
+
+		fmt.Printf("Sending event to %s\n", client.Id())
+
+		success := client.SendEvent(event)
+
+		if !success {
+			fmt.Println("Error sending event")
+			continue
+		}
+
+	}
+}
+
+func GetConnections() []interfaces.ClientInterface {
+	return Connections
+}
