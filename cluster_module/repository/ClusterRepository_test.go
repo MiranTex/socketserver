@@ -13,7 +13,7 @@ func TestClusterRepository(t *testing.T) {
 
 	t.Run("Test Save Cluster", func(t *testing.T) {
 
-		cluster := entity.NewCluster(1, "Cluster 1", nil, "token", false, "owner")
+		cluster := entity.NewCluster(1, "Cluster 1", nil, "token", false, "owner", "1234")
 
 		fmt.Println(cluster)
 

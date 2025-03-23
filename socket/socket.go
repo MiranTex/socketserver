@@ -25,20 +25,22 @@ var (
 		},
 	}
 
-	Clusters []entity.Cluster
+	Clusters *entity.ClusterList
 
-	connections sync.Map
-	eventChan   = make(chan Classes.Event, 100)
 	ctx, cancel = context.WithCancel(context.Background())
 	wg          sync.WaitGroup
 )
 
 func init() {
-	go eventDispatcher()
+	// Removed global event dispatcher
 }
 
-func InitClusters(clusters []entity.Cluster) {
-	Clusters = clusters
+func InitClusters(clusters []*entity.Cluster) {
+	Clusters = entity.NewClusterList(clusters...)
+	for _, cluster := range clusters {
+		cluster.InitEventChannel()
+		go clusterEventDispatcher(cluster)
+	}
 }
 
 func Handler(w http.ResponseWriter, r *http.Request) {
@@ -63,52 +65,33 @@ func Handler(w http.ResponseWriter, r *http.Request) {
 			continue
 		}
 
-		cluster, err := getClusterByPublickKey(request.ClusterPublicId)
-		fmt.Println(cluster)
+		cluster, err := AuthClient(request.ClusterPublicId, request.AccessToken)
 
-		if err != nil {
-			conn.WriteMessage(websocket.TextMessage, []byte("Cluster not found"))
-			break
-		}
-
-		if !cluster.AuthenticateonCluster(request.AccessToken) {
+		if err != nil || cluster == nil {
 			conn.WriteMessage(websocket.TextMessage, []byte("Unauthorized"))
 
-			break
+			continue
 		}
 
 		switch request.RequestType {
 		case "connection":
 
-			fmt.Println("Connection request")
-
 			client := factory.CreateClient(utils.GenerateUUID(), conn, request.Subscriptions)
-			connections.Store(request.Id, client)
+
+			cluster.AddClient(client)
 
 			client.SendEvent(Classes.CreateEvent(utils.GenerateUUID(), "connection", map[string]interface{}{"id": client.Id()}))
 
 			wg.Add(1)
-			go handleClientEvents(ctx, client)
+			go handleClientEvents(ctx, client, cluster)
 		case "event":
-			fmt.Println("Event request")
 			event := Classes.CreateEvent(request.Id, request.EventType, request.EventMessage)
-			eventChan <- event
+			cluster.EventChan <- event
 		}
 	}
 }
 
-func getClusterByPublickKey(publicKey string) (entity.Cluster, error) {
-	for _, cluster := range Clusters {
-		if cluster.PublicId() == publicKey {
-			return cluster, nil
-		}
-	}
-	return entity.Cluster{}, fmt.Errorf("cluster not found")
-}
-
-func handleClientEvents(ctx context.Context, client interfaces.ClientInterface) {
-
-	fmt.Println("Handling client events")
+func handleClientEvents(ctx context.Context, client interfaces.ClientInterface, cluster *entity.Cluster) {
 
 	defer wg.Done()
 	for {
@@ -117,23 +100,24 @@ func handleClientEvents(ctx context.Context, client interfaces.ClientInterface) 
 			return
 		default:
 			if !client.GetConnectionSatus() {
-				connections.Delete(client.Id())
+				cluster.RemoveClient(client)
 				return
 			}
 		}
 	}
 }
 
-func eventDispatcher() {
+func clusterEventDispatcher(cluster *entity.Cluster) {
 	for {
 		select {
 		case <-ctx.Done():
 			return
-		case event := <-eventChan:
-			connections.Range(func(key, value interface{}) bool {
+		case event := <-cluster.EventChan:
+
+			cluster.GetConnections().Range(func(key, value interface{}) bool {
 				client := value.(interfaces.ClientInterface)
 				if success, err := client.SendEvent(event); !success || err != nil {
-					log.Printf("Error sending event to client %s\n", client.Id())
+					// log.Printf("Error sending event to client %s\n", client.Id())
 				}
 				return true
 			})
@@ -141,17 +125,36 @@ func eventDispatcher() {
 	}
 }
 
-func GetConnections() []interfaces.ClientInterface {
-	var clients []interfaces.ClientInterface
-	connections.Range(func(_, value interface{}) bool {
-		clients = append(clients, value.(interfaces.ClientInterface))
-		return true
-	})
-	return clients
+func GetConnections(clusterId string) *sync.Map {
+
+	cluster, error := Clusters.GetClusterByPublickKey(clusterId)
+
+	if error != nil {
+		return nil
+	}
+
+	connections := cluster.GetConnections()
+
+	return connections
+}
+
+func AuthClient(clusterPId string, access_token string) (*entity.Cluster, error) {
+
+	cluster, err := Clusters.GetClusterByPublickKey(clusterPId)
+
+	if err != nil {
+		return nil, err
+	}
+
+	if !cluster.AuthenticateonCluster(access_token) {
+		return nil, fmt.Errorf("Unauthorized")
+	}
+
+	return cluster, nil
+
 }
 
 func Shutdown() {
 	cancel()
-	close(eventChan)
 	wg.Wait()
 }

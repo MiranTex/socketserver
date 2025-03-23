@@ -25,17 +25,17 @@ func SaveCluster(dbConnection *gorm.DB, cluster ToModelCovertable[models.Cluster
 
 }
 
-func GetAllClusters(dbConnection *gorm.DB) []entity.Cluster {
+func GetAllClusters(dbConnection *gorm.DB) []*entity.Cluster {
 
 	var clustersModels []models.Cluster
 
 	dbConnection.Find(&clustersModels)
 
-	var clusters []entity.Cluster
+	var clusters []*entity.Cluster
 
 	for _, clusterModel := range clustersModels {
 		cluster := entity.CreateFromModel(clusterModel)
-		clusters = append(clusters, *cluster)
+		clusters = append(clusters, cluster)
 	}
 
 	return clusters

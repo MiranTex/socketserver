@@ -2,18 +2,22 @@ package entity
 
 import (
 	"encoding/json"
+	"fmt"
+	Classes "socket_project/classes"
 	models "socket_project/cluster_module/Models"
 	"socket_project/cluster_module/interfaces"
+	"sync"
 )
 
 type Cluster struct {
 	id           int
 	publicId     string
 	name         string
-	clients      []interfaces.ClusterClientInterface
+	clients      sync.Map
 	access_token string
 	status       bool
 	owner        string
+	EventChan    chan Classes.Event // Add EventChan field
 }
 
 type ClusterJSON struct {
@@ -27,15 +31,28 @@ type ClusterJSON struct {
 
 func NewCluster(id int, name string, clients []interfaces.ClusterClientInterface, access_token string, status bool, owner string, publicId string) *Cluster {
 
-	return &Cluster{
+	cluster := &Cluster{
 		id:           id,
 		name:         name,
-		clients:      clients,
+		clients:      sync.Map{},
 		access_token: access_token,
 		status:       status,
 		owner:        owner,
 		publicId:     publicId,
+		EventChan:    make(chan Classes.Event, 1000), // Initialize EventChan
 	}
+
+	if clients != nil {
+		for _, client := range clients {
+			cluster.clients.Store(client.Id(), client)
+		}
+	}
+
+	return cluster
+}
+
+func (c *Cluster) InitEventChannel() {
+	c.EventChan = make(chan Classes.Event, 1000)
 }
 
 func (c *Cluster) ID() int {
@@ -47,7 +64,11 @@ func (c *Cluster) PublicId() string {
 }
 
 func (c *Cluster) AddClient(client interfaces.ClusterClientInterface) {
-	c.clients = append(c.clients, client)
+	c.clients.Store(client.Id(), client)
+}
+
+func (c *Cluster) RemoveClient(client interfaces.ClusterClientInterface) {
+	c.clients.Delete(client.Id())
 }
 
 func (c *Cluster) StartCluster() {
@@ -94,4 +115,22 @@ func (c *Cluster) MarshalJSON() ([]byte, error) {
 
 func (c *Cluster) AuthenticateonCluster(access_token string) bool {
 	return c.access_token == access_token
+}
+
+func (c *Cluster) GetConnections() *sync.Map {
+	return &c.clients
+}
+
+func (c *Cluster) AuthenticateClient(access_token string) bool {
+
+	fmt.Println("Access token: ", access_token, "Cluster access token: ", c.access_token)
+	return c.access_token == access_token
+}
+
+func (c *Cluster) NotifyClients(event Classes.Event) {
+	c.clients.Range(func(key, value interface{}) bool {
+		client := value.(interfaces.ClusterClientInterface)
+		client.SendEvent(event)
+		return true
+	})
 }

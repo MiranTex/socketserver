@@ -65,3 +65,7 @@ func (c Client) GetConnectionSatus() bool {
 
 	return err == nil
 }
+
+func (c Client) Notify(event Event) {
+	c.SendEvent(event)
+}

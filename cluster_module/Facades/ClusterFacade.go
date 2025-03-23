@@ -41,7 +41,7 @@ func CreateCluster(c *gin.Context) int {
 
 }
 
-func GetAllClusters() []entity.Cluster {
+func GetAllClusters() []*entity.Cluster {
 
 	db := database.GetSqliteConnection()
 

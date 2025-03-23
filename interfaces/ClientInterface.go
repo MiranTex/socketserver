@@ -1,8 +1,6 @@
 package interfaces
 
-import (
-	Classes "socket_project/classes"
-)
+import Classes "socket_project/classes"
 
 type ClientInterface interface {
 	Id() string

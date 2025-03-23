@@ -17,8 +17,8 @@ func main() {
 
 	router := r.InitRouter()
 
-	go router.Run(":8081")
+	go router.Run("0.0.0.0:8081")
 
 	http.HandleFunc("/socket", socket.Handler)
-	log.Fatal(http.ListenAndServe(":8082", nil))
+	log.Fatal(http.ListenAndServe("0.0.0.0:8082", nil))
 }
